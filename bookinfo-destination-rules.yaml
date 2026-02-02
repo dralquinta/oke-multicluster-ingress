@@ -1,0 +1,129 @@
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: productpage
+  namespace: bookinfo
+spec:
+  host: productpage
+  trafficPolicy:
+    connectionPool:
+      tcp:
+        maxConnections: 100
+      http:
+        http1MaxPendingRequests: 100
+        http2MaxRequests: 100
+        maxRequestsPerConnection: 2
+    loadBalancer:
+      localityLbSetting:
+        enabled: true
+        distribute:
+          - from: us-sanjose-1/*
+            to:
+              "us-sanjose-1/*": 80
+              "us-chicago-1/*": 20
+          - from: us-chicago-1/*
+            to:
+              "us-chicago-1/*": 80
+              "us-sanjose-1/*": 20
+    outlierDetection:
+      consecutive5xxErrors: 5
+      interval: 30s
+      baseEjectionTime: 30s
+      maxEjectionPercent: 50
+      minHealthPercent: 40
+  subsets:
+  - name: v1
+    labels:
+      version: v1
+---
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: reviews
+  namespace: bookinfo
+spec:
+  host: reviews
+  trafficPolicy:
+    connectionPool:
+      tcp:
+        maxConnections: 100
+      http:
+        http1MaxPendingRequests: 50
+        http2MaxRequests: 100
+    loadBalancer:
+      localityLbSetting:
+        enabled: true
+        distribute:
+          - from: us-sanjose-1/*
+            to:
+              "us-sanjose-1/*": 70
+              "us-chicago-1/*": 30
+          - from: us-chicago-1/*
+            to:
+              "us-chicago-1/*": 70
+              "us-sanjose-1/*": 30
+    outlierDetection:
+      consecutive5xxErrors: 3
+      interval: 10s
+      baseEjectionTime: 30s
+      maxEjectionPercent: 50
+  subsets:
+  - name: v1
+    labels:
+      version: v1
+  - name: v2
+    labels:
+      version: v2
+  - name: v3
+    labels:
+      version: v3
+---
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: ratings
+  namespace: bookinfo
+spec:
+  host: ratings
+  trafficPolicy:
+    connectionPool:
+      tcp:
+        maxConnections: 100
+      http:
+        http1MaxPendingRequests: 50
+    loadBalancer:
+      localityLbSetting:
+        enabled: true
+    outlierDetection:
+      consecutive5xxErrors: 5
+      interval: 30s
+      baseEjectionTime: 60s
+  subsets:
+  - name: v1
+    labels:
+      version: v1
+---
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: details
+  namespace: bookinfo
+spec:
+  host: details
+  trafficPolicy:
+    connectionPool:
+      tcp:
+        maxConnections: 100
+      http:
+        http1MaxPendingRequests: 50
+    loadBalancer:
+      localityLbSetting:
+        enabled: true
+    outlierDetection:
+      consecutive5xxErrors: 5
+      interval: 30s
+      baseEjectionTime: 60s
+  subsets:
+  - name: v1
+    labels:
+      version: v1
