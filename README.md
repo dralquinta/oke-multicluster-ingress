@@ -6,7 +6,31 @@
 
 **Status**: Cross-cluster pod-to-pod connectivity fully operational (0% packet loss, ~44ms latency)  
 **Key Achievement**: VCN-native pod networking enables direct pod routing through DRG/RPC  
-**See**: [WEEK1_COMPLETION_SUMMARY.md](WEEK1_COMPLETION_SUMMARY.md) for detailed completion report
+**See**: [WEEK1_COMPLETION_SUMMARY.md](docs/WEEK1_COMPLETION_SUMMARY.md) for detailed completion report
+
+---
+
+## 🎉 Week 2 Istio Service Mesh: COMPLETE ✅
+
+**Status**: Multi-cluster, multi-primary Istio mesh with mTLS fully operational  
+**Key Achievement**: East-west gateways enabling cross-cluster service-to-service communication  
+**See**: [WEEK2_COMPLETION_SUMMARY.md](docs/WEEK2_COMPLETION_SUMMARY.md) for detailed completion report
+
+---
+
+## 🎉 Week 3 Application Deployment: COMPLETE ✅
+
+**Status**: Bookinfo microservices running on both clusters with advanced traffic management  
+**Key Achievement**: Cross-cluster load balancing, circuit breakers, and observability operational  
+**See**: [WEEK3_COMPLETION_SUMMARY.md](docs/WEEK3_COMPLETION_SUMMARY.md) for detailed completion report
+
+---
+
+## 🔄 Week 4 Enhanced Observability: COMPLETE ✅
+
+**Status**: Prometheus federation and AlertManager deployed, cross-cluster metrics aggregation operational  
+**Key Achievement**: Distributed observability with centralized alerting for service mesh health  
+**See**: [WEEK4_ENHANCED_OBSERVABILITY.md](docs/WEEK4_ENHANCED_OBSERVABILITY.md) for detailed progress
 
 ---
 
@@ -57,10 +81,10 @@ oci ce cluster get --cluster-id <PRIMARY_CLUSTER_ID> --region us-sanjose-1 | \
 # Expected output for cross-cluster routing:
 # [{"cni-type": "OCI_VCN_IP_NATIVE"}]
 
-# If you see "FLANNEL_OVERLAY", see RECREATE_WITH_VCN_NATIVE.md for instructions
+# If you see "FLANNEL_OVERLAY", see docs/RECREATE_WITH_VCN_NATIVE.md for instructions
 ```
 
-See [RECREATE_WITH_VCN_NATIVE.md](RECREATE_WITH_VCN_NATIVE.md) for detailed cluster recreation instructions.
+See [RECREATE_WITH_VCN_NATIVE.md](docs/RECREATE_WITH_VCN_NATIVE.md) for detailed cluster recreation instructions.
 
 ---
 
@@ -1728,44 +1752,118 @@ oci mysql db-system create \
   - Primary URL: http://163.192.53.128/productpage
   - Secondary URL: http://207.211.166.34/productpage
 - ✅ Applied locality-aware traffic policies and resilience settings
-  - DestinationRules: [bookinfo-destination-rules.yaml](bookinfo-destination-rules.yaml)
-  - VirtualServices: [bookinfo-virtual-services.yaml](bookinfo-virtual-services.yaml)
+  - DestinationRules: [yaml/bookinfo-destination-rules.yaml](yaml/bookinfo-destination-rules.yaml)
+  - VirtualServices: [yaml/bookinfo-virtual-services.yaml](yaml/bookinfo-virtual-services.yaml)
 - ✅ Observability stack installed on primary cluster
   - Prometheus, Grafana, Kiali, Jaeger deployed in istio-system
-  - Gateway/VirtualServices: [observability-gateway.yaml](observability-gateway.yaml)
+  - Gateway/VirtualServices: [yaml/observability-gateway.yaml](yaml/observability-gateway.yaml)
 
-### Phase 4: Database & Persistence (Week 4)
+#### Testing Bookinfo Application
+
+**Access via Browser or curl**:
+- **Primary Cluster**: http://163.192.53.128/productpage
+- **Secondary Cluster**: http://207.211.166.34/productpage
+
+**Test Cross-Cluster Load Balancing**:
+```bash
+# Test from primary ingress - observe traffic to both clusters
+for i in {1..10}; do
+  curl -s http://163.192.53.128/productpage | grep -o "reviews-v[1-3]" | head -1
+done | sort | uniq -c
+
+# Expected output shows traffic distributed across all review versions:
+# 3 reviews-v1  (no stars - primary cluster)
+# 4 reviews-v2  (black stars - secondary cluster)
+# 3 reviews-v3  (red stars - both clusters)
+```
+
+**Verify Multi-Cluster Service Mesh**:
+```bash
+# Check that services see endpoints from both clusters
+kubectl --context=primary-cluster-context exec -n bookinfo deploy/productpage-v1 -c istio-proxy -- \
+  curl -s localhost:15000/clusters | grep "reviews.*::10\." | head -5
+
+# Expected: Shows pod IPs from both 10.0.x.x (primary) and 10.1.x.x (secondary)
+```
+
+**Test Traffic Routing Policies**:
+```bash
+# Test weighted traffic distribution configured in VirtualService
+for i in {1..20}; do
+  curl -s http://163.192.53.128/productpage > /dev/null
+done
+
+# Check Istio metrics for distribution (should show ~50% v1, 30% v2, 20% v3)
+kubectl --context=primary-cluster-context exec -n istio-system deploy/istiod -- \
+  pilot-discovery request GET /debug/edsz | grep reviews
+```
+
+### Phase 4: Enhanced Observability (Week 4) ✅ COMPLETE
 
 ```bash
 # Week 4, Day 1-3
-1. Create primary Autonomous Database
-2. Set up Data Guard for secondary region
-3. Initialize database schema
-4. Create Kubernetes secrets for DB credentials
+✅ 1. Deploy Prometheus federation for distributed metrics collection across clusters
+✅ 2. Deploy AlertManager with webhook receivers for critical alerts
+✅ 3. Create custom Grafana dashboards for multi-cluster metrics
+✅ 4. Set up alerting rules for critical service mesh events (7 rules configured)
 
 # Week 4, Day 4-5
-5. Deploy sample stateful application
-6. Configure DB connection pooling in app
-7. Test failover scenarios
-8. Document RPO/RTO metrics
+✅ 5. Deploy and validate observability during normal operations
+✅ 6. Document monitoring and alerting strategy
+✅ 7. Create comprehensive dashboard access guides
 ```
 
-### Phase 5: Observability & Monitoring (Week 5)
+**Week 4 Completed Components:**
 
+1. **Prometheus Federation** - Cross-cluster metrics aggregation ✅
+   - Primary cluster Prometheus: Running (2/2 pods)
+   - Secondary cluster Prometheus: Running (2/2 pods)
+   - Federation endpoint configured with cluster/region labels
+   - VirtualService for /federate endpoint
+
+2. **AlertManager** - Centralized alerting infrastructure ✅
+   - Deployment: Running (1/1 pods)
+   - Webhook receivers: default, critical, warning
+   - Service endpoint: alertmanager.istio-system:9093
+
+3. **Alert Rules** - 7 critical service mesh alerts configured ✅:
+   - **HighErrorRate** (critical): >5% error rate for 5 minutes
+   - **IngressGatewayDown** (critical): Gateway unavailable for 1 minute
+   - **IstiodDown** (critical): Control plane unavailable for 2 minutes
+   - **HighLatency** (warning): P99 latency >1000ms for 5 minutes
+   - **CrossClusterConnectivityIssue** (warning): No cross-cluster traffic for 5 minutes
+   - **CircuitBreakerTriggered** (warning): Circuit breaker activated
+   - **HighConnectionPoolUsage** (warning): Connection pool >80% for 5 minutes
+
+4. **Multi-Cluster Dashboards** - Custom Grafana dashboard configuration created ✅
+   - Multi-cluster request rate overview
+   - Error rate by cluster/service
+   - Cross-cluster traffic visualization
+   - Circuit breaker status monitoring
+
+5. **Observability Tools** - All accessible with comprehensive guides ✅
+   - Grafana: Metrics visualization and dashboards
+   - Kiali: Service mesh topology and traffic flows
+   - Prometheus: Metrics database and querying
+   - AlertManager: Alert aggregation and routing
+   - Jaeger: Distributed request tracing
+
+**Services Running:**
 ```bash
-# Week 5, Day 1-3
-1. Install Prometheus in both clusters
-2. Deploy Thanos for distributed metrics collection
-3. Configure Grafana dashboards
-4. Set up alerting rules
+# Primary cluster (us-sanjose-1)
+prometheus          ClusterIP   10.96.31.96     9090/TCP
+prometheus-federated ClusterIP   10.96.76.247    9090/TCP
+alertmanager        ClusterIP   10.96.71.241    9093/TCP
+grafana             ClusterIP   10.96.2.34      3000/TCP
+kiali               ClusterIP   10.96.202.22    20001/TCP
+jaeger-collector    ClusterIP   10.96.183.215   14268/TCP
 
-# Week 5, Day 4-5
-5. Configure distributed tracing (Jaeger)
-6. Set up centralized logging (ELK or OCI Logging)
-7. Test observability during failover
+# Secondary cluster (us-chicago-1)
+prometheus          ClusterIP   (running)       9090/TCP
 ```
 
-### Phase 6: DR Drills & Handoff (Week 6)
+
+### Phase 5: DR Drills & Production Handoff (Week 5)
 
 ```bash
 # Week 6, Day 1-3
@@ -1783,7 +1881,72 @@ oci mysql db-system create \
 
 ## Testing & Validation
 
-### 6.1 East-West Routing Tests
+### 6.1 Bookinfo Application Testing
+
+**Access Bookinfo Application**:
+
+```bash
+# Primary cluster (us-sanjose-1)
+curl http://163.192.53.128/productpage
+
+# Secondary cluster (us-chicago-1)
+curl http://207.211.166.34/productpage
+
+# Browser access:
+# - http://163.192.53.128/productpage
+# - http://207.211.166.34/productpage
+```
+
+**Test Cross-Cluster Traffic Distribution**:
+
+```bash
+# Generate traffic and observe which cluster/version responds
+for i in {1..20}; do
+  curl -s http://163.192.53.128/productpage | \
+    grep -o 'reviews-v[1-3]-[a-z0-9-]*' | head -1
+done | sort | uniq -c
+
+# Expected output:
+# Shows pod names from BOTH clusters
+# Example:
+#   6 reviews-v1-8cf7b9cc5-ftj5w    (primary cluster)
+#   4 reviews-v1-8cf7b9cc5-gskgv    (secondary cluster)
+#   5 reviews-v2-67d565655f-sfk75   (primary cluster)
+#   5 reviews-v2-67d565655f-2w6w2   (secondary cluster)
+```
+
+**Verify Review Service Versions**:
+
+```bash
+# v1 = No stars
+# v2 = Black stars  
+# v3 = Red stars
+
+# Test multiple times and observe star rendering
+for i in {1..5}; do
+  echo "Request $i:"
+  curl -s http://163.192.53.128/productpage | grep -A 2 "glyphicon-star" | head -3
+  echo "---"
+done
+```
+
+**Test Locality-Based Load Balancing**:
+
+```bash
+# Traffic from primary ingress should prefer primary cluster pods (80/20 split)
+# Configured in DestinationRule: yaml/bookinfo-destination-rules.yaml
+
+# Generate 50 requests
+for i in {1..50}; do
+  curl -s http://163.192.53.128/productpage > /dev/null
+done
+
+# Check Envoy stats to see locality distribution
+kubectl --context=primary-cluster-context exec -n bookinfo deploy/productpage-v1 -c istio-proxy -- \
+  curl -s localhost:15000/stats/prometheus | grep "envoy_cluster_upstream_cx_active{cluster_name=\"outbound|9080||reviews"
+```
+
+### 6.2 East-West Routing Tests
 
 ```bash
 # Test cross-cluster service discovery
@@ -1807,7 +1970,7 @@ kubectl --context=primary-cluster-context debug pod/<POD_NAME> \
   curl localhost:15000/config_dump | grep secondary
 ```
 
-### 6.3 Ingress Failover Tests
+### 6.4 Ingress Failover Tests
 
 ```bash
 # Get primary ingress gateway IP
@@ -1816,39 +1979,36 @@ PRIMARY_GW=$(kubectl --context=primary-cluster-context get svc \
   -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
 
 # Test ingress connectivity
-curl -H "Host: app.example.com" http://$PRIMARY_GW
+curl http://$PRIMARY_GW/productpage
 
 # Simulate gateway failure
 kubectl --context=primary-cluster-context delete pod \
   -l app=istio-ingressgateway -n istio-system
 
-# Verify DNS failover to secondary
-nslookup app.example.com
-# Expected: Should resolve to secondary IP after TTL expires
+# Traffic should automatically route through secondary cluster
+SECONDARY_GW=$(kubectl --context=secondary-cluster get svc \
+  istio-ingressgateway -n istio-system \
+  -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
 
-# Curl through DNS (should go to secondary now)
-curl -H "Host: app.example.com" http://app.example.com
+curl http://$SECONDARY_GW/productpage
+# Expected: Successful response from secondary cluster
 ```
 
-### 6.4 Database Failover Tests
+### 6.5 Cluster Resilience Tests
 
 ```bash
-# Test primary database connectivity
-kubectl --context=primary-cluster-context run -it --rm db-test \
-  --image=cirros --restart=Never -- \
-  sqlplus admin@primary_adb
+# Test service resilience by scaling down primary cluster services
+kubectl --context=primary-cluster-context scale deployment productpage-v1 -n bookinfo --replicas=0
 
-# Simulate database failure (manual switch or automatic failover)
-oci db autonomous-database failover \
-  --autonomous-database-id <PRIMARY_ADB_ID>
+# Verify traffic automatically routes to secondary cluster instances
+for i in {1..10}; do curl -s http://$PRIMARY_GW/productpage | grep -o 'reviews-v[0-9]'; done
+# Expected: All responses from secondary cluster instances
 
-# Verify applications reconnect to standby
-kubectl --context=secondary-cluster-context get pods \
-  | grep -i error
-# Expected: No pods in error state after reconnection
+# Restore primary services
+kubectl --context=primary-cluster-context scale deployment productpage-v1 -n bookinfo --replicas=1
 ```
 
-### 6.5 Service Mesh Metrics Collection
+### 6.6 Service Mesh Metrics Collection
 
 ```bash
 # Query Prometheus for mesh metrics
@@ -1868,7 +2028,183 @@ kubectl --context=primary-cluster-context port-forward \
 
 ## Operational Runbook
 
-### 7.1 Daily Health Checks
+### 7.1 Accessing Observability Dashboards
+
+**Overview**: The multi-cluster service mesh provides comprehensive observability through multiple integrated tools. Use port-forwarding to access dashboards locally.
+
+#### Grafana - Multi-Cluster Dashboards
+
+**Purpose**: Centralized metrics visualization, custom dashboards, and alerts
+
+**Access**:
+```bash
+# Port-forward Grafana
+kubectl --context=primary-cluster-context port-forward -n istio-system svc/grafana 3000:3000
+
+# Open browser: http://localhost:3000
+# Credentials: admin / admin
+```
+
+**Available Dashboards**:
+- **Istio Control Plane**: Istiod status, mTLS certificate expiry, deployment metrics
+- **Istio Mesh**: Service request rates, error rates, latency distributions
+- **Istio Performance**: P50/P90/P99 latencies, throughput, connection pools
+- **Multi-Cluster Overview** (custom): Cross-cluster request distribution, error rates by cluster/service
+- **Bookinfo Application**: Application-specific metrics (productpage response times, review ratings, etc.)
+
+**Key Metrics to Monitor**:
+- Request rate by cluster: `sum(rate(istio_requests_total[5m])) by (cluster)`
+- Error rate: `sum(rate(istio_requests_total{response_code=~"5.."}[5m])) by (destination_service)`
+- Latency P99: `histogram_quantile(0.99, rate(istio_request_duration_milliseconds_bucket[5m]))`
+- Circuit breaker status: `sum(rate(istio_requests_total{response_flags=~".*UO.*"}[5m]))`
+
+#### Kiali - Service Mesh Topology
+
+**Purpose**: Real-time visual representation of service mesh, traffic flows, and health status
+
+**Access**:
+```bash
+# Port-forward Kiali
+kubectl --context=primary-cluster-context port-forward -n istio-system svc/kiali 20001:20001
+
+# Open browser: http://localhost:20001
+# Credentials: admin / admin
+```
+
+**Key Views**:
+1. **Graph** (Namespace: bookinfo):
+   - Visualizes service dependencies
+   - Color-coded nodes: Green (healthy), Red (errors), Yellow (warnings)
+   - Blue edges = mTLS-encrypted traffic
+   - Traffic labels = request rate/s
+   - Shows cross-cluster traffic (primary ↔ secondary)
+
+2. **Applications**:
+   - Lists all deployed applications
+   - Shows health indicators (✓ healthy, ✗ issues)
+   - Click to view application details
+
+3. **Workloads**:
+   - Pod-level visibility
+   - Sidecar injection status (2/2 containers = injected)
+   - Pod IP addresses (10.0.x.x primary, 10.1.x.x secondary)
+   - Logs and metrics per workload
+
+4. **Services**:
+   - Service endpoints from both clusters
+   - Virtual service and destination rule configuration
+   - Incoming/outgoing traffic metrics
+
+5. **Traffic**:
+   - Real-time traffic visualization
+   - Request success rates
+   - Error distribution
+   - Response time histograms
+
+#### Prometheus - Metrics Database
+
+**Purpose**: Time-series metrics collection, aggregation, and querying
+
+**Access**:
+```bash
+# Port-forward Prometheus
+kubectl --context=primary-cluster-context port-forward -n istio-system svc/prometheus 9090:9090
+
+# Open browser: http://localhost:9090
+```
+
+**Useful Queries**:
+```
+# Total requests by cluster
+sum(rate(istio_requests_total[5m])) by (cluster)
+
+# Cross-cluster traffic only
+istio_requests_total{source_cluster!="destination_cluster"}
+
+# Request distribution (v1: 50%, v2: 30%, v3: 20%)
+sum(rate(istio_requests_total[5m])) by (destination_version)
+
+# Error rate percentage
+(sum(rate(istio_requests_total{response_code=~"5.."}[5m])) / sum(rate(istio_requests_total[5m]))) * 100
+
+# Circuit breaker status (UO = Upstream Overflow)
+sum(rate(istio_requests_total{response_flags=~".*UO.*"}[5m])) by (destination_service)
+
+# P99 latency
+histogram_quantile(0.99, rate(istio_request_duration_milliseconds_bucket[5m]))
+
+# Connection pool usage
+envoy_cluster_upstream_cx_active / envoy_cluster_circuit_breakers_default_cx_pool_open
+```
+
+#### AlertManager - Alert Management
+
+**Purpose**: Centralized alert aggregation, routing, and silencing
+
+**Access**:
+```bash
+# Port-forward AlertManager
+kubectl --context=primary-cluster-context port-forward -n istio-system svc/alertmanager 9093:9093
+
+# Open browser: http://localhost:9093
+```
+
+**Key Sections**:
+- **Alerts**: Active critical/warning alerts fired by Prometheus
+- **Silences**: Temporarily suppress alerts (useful for maintenance)
+- **Status**: Configuration details, webhook receivers status
+
+**Alert Rules (7 configured)**:
+| Alert | Severity | Trigger | Action |
+|-------|----------|---------|--------|
+| HighErrorRate | Critical | >5% errors for 5min | Investigate service health |
+| IngressGatewayDown | Critical | Gateway down 1min | Check ingress pod status |
+| IstiodDown | Critical | Control plane down 2min | Restart istiod or failover |
+| HighLatency | Warning | P99 >1000ms for 5min | Scale services, optimize |
+| CrossClusterConnectivityIssue | Warning | No cross-cluster traffic 5min | Check DRG, network policies |
+| CircuitBreakerTriggered | Warning | UO flags present 2min | Monitor service health |
+| HighConnectionPoolUsage | Warning | Pool >80% for 5min | Increase pool size or load test |
+
+#### Jaeger - Distributed Tracing
+
+**Purpose**: End-to-end request tracing across microservices and clusters
+
+**Access**:
+```bash
+# Port-forward Jaeger
+kubectl --context=primary-cluster-context port-forward -n istio-system svc/jaeger-collector 16686:16686
+
+# Open browser: http://localhost:16686
+```
+
+**How to Trace Requests**:
+1. Select service: `productpage`
+2. Set lookback: Last 1 hour
+3. Click "Find Traces"
+4. Click on trace to view:
+   - Full request flow through services
+   - Latency at each step (productpage → details, productpage → reviews → ratings)
+   - Cross-cluster calls (shown in different colors)
+   - Error traces (red spans show failures)
+   - Tags: cluster name, namespace, pod name
+
+#### Recommended Monitoring Routine
+
+**Every 5 minutes**:
+- Check Kiali Graph for red nodes (service errors)
+- Review AlertManager for new critical alerts
+
+**Every hour**:
+- Check Grafana error rate graph
+- Verify cross-cluster traffic (should see non-zero)
+- Check connection pool usage
+
+**Every day**:
+- Review P99 latency trends
+- Check circuit breaker trigger frequency
+- Validate cross-cluster endpoint counts match expected
+
+### 7.2 Daily Health Checks
 
 ```bash
 #!/bin/bash

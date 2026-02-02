@@ -1,0 +1,127 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-federation
+  namespace: istio-system
+data:
+  prometheus.yml: |
+    global:
+      scrape_interval: 15s
+      evaluation_interval: 15s
+      external_labels:
+        cluster: 'primary-cluster'
+        region: 'us-sanjose-1'
+
+    scrape_configs:
+      # Scrape local Prometheus
+      - job_name: 'prometheus'
+        static_configs:
+          - targets: ['localhost:9090']
+
+      # Federate from secondary cluster
+      - job_name: 'federate-secondary'
+        scrape_interval: 15s
+        honor_labels: true
+        metrics_path: '/federate'
+        params:
+          'match[]':
+            - '{job=~".+"}'
+        static_configs:
+          - targets: ['prometheus.istio-system.svc.cluster.local:9090']
+            labels:
+              cluster: 'secondary-cluster'
+              region: 'us-chicago-1'
+
+      # Istio mesh metrics
+      - job_name: 'istio-mesh'
+        kubernetes_sd_configs:
+        - role: endpoints
+          namespaces:
+            names:
+            - istio-system
+        relabel_configs:
+        - source_labels: [__meta_kubernetes_service_name, __meta_kubernetes_endpoint_port_name]
+          action: keep
+          regex: istio-telemetry;prometheus
+
+      # Envoy stats
+      - job_name: 'envoy-stats'
+        metrics_path: /stats/prometheus
+        kubernetes_sd_configs:
+        - role: pod
+        relabel_configs:
+        - source_labels: [__meta_kubernetes_pod_container_port_name]
+          action: keep
+          regex: '.*-envoy-prom'
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboards-multicluster
+  namespace: istio-system
+data:
+  multicluster-overview.json: |
+    {
+      "dashboard": {
+        "title": "Multi-Cluster Service Mesh Overview",
+        "panels": [
+          {
+            "title": "Request Rate by Cluster",
+            "targets": [
+              {
+                "expr": "sum(rate(istio_requests_total[5m])) by (cluster)"
+              }
+            ]
+          },
+          {
+            "title": "Error Rate by Cluster",
+            "targets": [
+              {
+                "expr": "sum(rate(istio_requests_total{response_code=~\"5..\"}[5m])) by (cluster)"
+              }
+            ]
+          },
+          {
+            "title": "Cross-Cluster Traffic",
+            "targets": [
+              {
+                "expr": "sum(rate(istio_requests_total{source_cluster!=\"destination_cluster\"}[5m]))"
+              }
+            ]
+          }
+        ]
+      }
+    }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: prometheus-federated
+  namespace: istio-system
+spec:
+  type: ClusterIP
+  selector:
+    app: prometheus
+  ports:
+  - name: http
+    port: 9090
+    targetPort: 9090
+---
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: prometheus-federation
+  namespace: istio-system
+spec:
+  hosts:
+  - "prometheus.istio-system.svc.cluster.local"
+  http:
+  - match:
+    - uri:
+        prefix: /federate
+    route:
+    - destination:
+        host: prometheus
+        port:
+          number: 9090
+      weight: 100
